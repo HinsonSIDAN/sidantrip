@@ -1,0 +1,87 @@
+# ─── Planner Crew Tasks ───────────────────────────────────────────────
+
+plan_itinerary:
+  description: >
+    Based on the traveler's message: "{user_message}"
+
+    Current trip context:
+    - Destination: {destination}
+    - Dates: {start_date} to {end_date}
+    - Accommodation: {accommodation}
+
+    Current itinerary state:
+    {itinerary_state}
+
+    Available activities from the database:
+    {activity_context}
+
+    Respond conversationally to the traveler. If they ask for suggestions, recommend activities
+    from the database grouped by neighborhood. If they confirm choices, update the itinerary.
+
+    IMPORTANT RULES:
+    - Only suggest activities that exist in the provided database context
+    - Group activities by neighborhood for efficient day planning
+    - Respect opening hours (don't schedule a temple visit at 10pm)
+    - Include meals at sensible times (lunch 11:30-13:30, dinner 17:30-20:00)
+    - Consider travel time between neighborhoods (~30-45 min by subway)
+    - For arrival/departure days, plan lighter schedules
+
+    You MUST include a JSON block in your response with any itinerary changes:
+    ```json
+    {
+      "deltas": [
+        {"action": "add", "day": 1, "slot": {"activity_id": "...", "start_time": "09:00", "end_time": "11:00", "notes": "..."}},
+        {"action": "remove", "day": 1, "activity_id": "..."},
+        {"action": "move", "activity_id": "...", "from_day": 1, "to_day": 2, "start_time": "14:00"},
+        {"action": "clear_day", "day": 3}
+      ]
+    }
+    ```
+    If no changes are needed (just chatting), use: ```json {"deltas": []} ```
+  expected_output: >
+    A conversational response to the traveler with activity suggestions or confirmations,
+    plus a JSON delta block that updates the itinerary state.
+  agent: planner
+
+# ─── Researcher Crew Tasks ────────────────────────────────────────────
+
+research_activities:
+  description: >
+    Research {num_activities} new {category} activities in {destination}, {neighborhood_focus}.
+
+    Requirements:
+    - Each activity must have: name, category, location (address + lat/lng), description,
+      practical_info, and at least one source link
+    - Cross-reference at least 2 sources per activity
+    - Verify coordinates using geocoding
+    - Follow the SidanTrip YAML schema exactly (see schema templates)
+    - Mark all entries with `source: ai-researched` in metadata
+    - Include quality_score based on source reliability (0.6-0.8 for AI-researched)
+
+    Schema template for reference:
+    {schema_template}
+  expected_output: >
+    A list of {num_activities} YAML-formatted activity entries, each following the exact
+    SidanTrip schema with all required fields populated.
+  agent: researcher
+
+review_activities:
+  description: >
+    Review the following AI-researched activity entries for quality and schema compliance:
+
+    {activity_entries}
+
+    For each entry, check:
+    1. All required fields present and correctly typed
+    2. Coordinates are plausible for the stated address
+    3. Description is specific and useful (not generic filler)
+    4. Prices/costs are in correct currency and realistic
+    5. Opening hours and practical info are complete
+    6. Source URLs are provided and described
+    7. ID follows naming convention: {destination}-{category}-{slug}
+
+    Approve, request changes, or reject each entry with clear reasoning.
+  expected_output: >
+    A review report for each entry: APPROVED, CHANGES_REQUESTED (with specific fixes),
+    or REJECTED (with reasoning). Include a summary count.
+  agent: reviewer
